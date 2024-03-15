@@ -150,6 +150,29 @@ fn handle_put_request(request: &str) -> (String, String) {
     }
 }
 
+fn handle_delete_request(request: &str) -> (String, String) {
+    match (
+        get_id(&request).parse::<i32>(),
+        Client::connect(DB_URL, NoTls),
+    ) {
+        (Ok(id), Ok(mut client)) => {
+            let rows_affected = client
+                .execute("DELETE FROM users WHERE id = $1", &[&id])
+                .unwrap();
+
+            if rows_affected == 0 {
+                return (NOT_FOUND.to_string(), "User Not Found".to_string());
+            }
+
+            (OK_RESPONSE.to_string(), "User Deleted".to_string())
+        }
+        _ => (
+            INTERNAL_SERVER_ERROR.to_string(),
+            "Internal Server Error".to_string(),
+        ),
+    }
+}
+
 fn setup_database() -> Result<(), PostgresError> {
     let mut client = Client::connect(DB_URL, NoTls)?;
 
