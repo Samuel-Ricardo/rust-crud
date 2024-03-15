@@ -1,5 +1,9 @@
 use dotenv::dotenv;
+use postgres::Error as PostgresError;
+use postgres::{Client, NoTls};
 use std::env;
+use std::io::{Read, Write};
+use std::net::{TcpListener, TcpStream};
 
 #[macro_use]
 extern crate serde_derive;
@@ -20,4 +24,22 @@ const INTERNAL_SERVER_ERROR: &str = "HTTP/1.1 500 INTERNAL SERVER ERROR\r\n\r\n"
 
 fn main() {
     dotenv().ok();
+
+    if let Err(e) = setup_database() {
+        println!("Error: {}", e);
+        return;
+    }
+}
+
+fn setup_database() -> Result<(), PostgresError> {
+    let mut client = Client::connect(DB_URL, NoTls)?;
+
+    client.batch_execute(
+        "CREATE TABLE IF NOT EXISTS users (
+            id SERIAL PRIMARY KEY,
+            name VARCHAR NOT NULL,
+            email VARCHAR NOT NULL
+        )",
+    )?;
+    Ok(())
 }
