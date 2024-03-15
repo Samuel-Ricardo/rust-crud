@@ -128,6 +128,28 @@ fn handle_get_all_request(request: &str) -> (String, String) {
     }
 }
 
+fn handle_put_request(request: &str) -> (String, String) {
+    match (
+        get_id(&request).parse::<i32>(),
+        get_user_request_body(&request),
+        Client::connect(DB_URL, NoTls),
+    ) {
+        (Ok(id), Ok(user), Ok(mut client)) => {
+            client
+                .execute(
+                    "UPDATE users SET name = $1, email = $2 WHERE id = $3",
+                    &[&user.name, &user.email, &id],
+                )
+                .unwrap();
+            (OK_RESPONSE.to_string(), "User Updated".to_string())
+        }
+        _ => (
+            INTERNAL_SERVER_ERROR.to_string(),
+            "Internal Server Error".to_string(),
+        ),
+    }
+}
+
 fn setup_database() -> Result<(), PostgresError> {
     let mut client = Client::connect(DB_URL, NoTls)?;
 
