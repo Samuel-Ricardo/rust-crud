@@ -29,6 +29,9 @@ fn main() {
         println!("Error: {}", e);
         return;
     }
+
+    let listener = TcpListener::bind(format!("0.0.0.0:8080")).unwrap();
+    println!("Server started at port 8080")
 }
 
 fn setup_database() -> Result<(), PostgresError> {
