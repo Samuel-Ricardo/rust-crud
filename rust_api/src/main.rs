@@ -34,6 +34,47 @@ fn main() {
     println!("Server started at port 8080")
 }
 
+/*
+fn handle_client(mut stream: TcpStream) {
+    let mut buffer = [0; 1024];
+    let mut request = String::new();
+
+    match stream.read(&mut buffer) {
+        Ok(size) => {
+            request.push_str(String::from_utf8_lossy(&buffer[..size]).as_ref());
+
+            let (status_line, content) = match &*request {
+                r if r.starts_with("POST /users") =>
+            };
+
+            //            stream.write_all(format!("{}{}", status))
+        }
+    }
+}
+*/
+
+fn handle_post_request(request: &str) -> (String, String) {
+    match (
+        get_user_request_body(&request),
+        Client::connect(DB_URL, NoTls),
+    ) {
+        (Ok(user), Ok(mut client)) => {
+            client
+                .execute(
+                    "INSERT INTO users (name, email) VALUES ($1, $2)",
+                    &[&user.name, &user.email],
+                )
+                .unwrap();
+
+            (OK_RESPONSE.to_string(), "User Created".to_string())
+        }
+        _ => (
+            INTERNAL_SERVER_ERROR.to_string(),
+            "Internal Server Error".to_string(),
+        ),
+    }
+}
+
 fn setup_database() -> Result<(), PostgresError> {
     let mut client = Client::connect(DB_URL, NoTls)?;
 
