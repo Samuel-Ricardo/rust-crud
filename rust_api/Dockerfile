@@ -5,7 +5,7 @@ WORKDIR /app
 
 ARG DATABASE_URL
 
-ENV DATABASE_URL=$DATABASE_URL 
+ENV DATABASE_URL=$DATABASE_URL
 
 COPY . .
 
@@ -16,6 +16,11 @@ FROM debian:buster-slim
 
 WORKDIR /usr/local/bin
 
+ARG DATABASE_URL
+
+ENV DATABASE_URL=$DATABASE_URL
+
 COPY --from=builder /app/target/release/rust_api .
 
-CMD [ "./rust_api" ]
+CMD ["./rust_api"]
+#CMD ["tail", "-f", "/dev/null"]
