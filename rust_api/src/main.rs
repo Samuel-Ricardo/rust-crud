@@ -1,5 +1,5 @@
 use dotenv::dotenv;
-use postgres::{row, Error as PostgresError};
+use postgres::Error as PostgresError;
 use postgres::{Client, NoTls};
 use std::env;
 use std::io::{Read, Write};
@@ -15,23 +15,36 @@ struct User {
     name: String,
     email: String,
 }
-
-const DB_URL: &str = env!("DATABASE_URL");
+fn DB_URL() -> String {
+    dotenv().ok();
+    env::var("DATABASE_URL").unwrap()
+}
 
 const OK_RESPONSE: &str = "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\n\r\n";
 const NOT_FOUND: &str = "HTTP/1.1 404 NOT FOUND\r\n\r\n";
 const INTERNAL_SERVER_ERROR: &str = "HTTP/1.1 500 INTERNAL SERVER ERROR\r\n\r\n";
 
 fn main() {
-    dotenv().ok();
-
     if let Err(e) = setup_database() {
-        println!("Error: {}", e);
+        println!("Setup Database Error: {}", e);
         return;
     }
 
     let listener = TcpListener::bind(format!("0.0.0.0:8080")).unwrap();
-    println!("Server started at port 8080")
+    println!("Server started at port 8080");
+
+    //handle the client
+    for stream in listener.incoming() {
+        match stream {
+            Ok(stream) => {
+                println!("Connection established");
+                handle_client(stream);
+            }
+            Err(e) => {
+                println!("Connection Error: {}", e);
+            }
+        }
+    }
 }
 
 fn handle_client(mut stream: TcpStream) {
@@ -43,12 +56,12 @@ fn handle_client(mut stream: TcpStream) {
             request.push_str(String::from_utf8_lossy(&buffer[..size]).as_ref());
 
             let (status_line, content) = match &*request {
-                r if r.starts_with("POST /users") => handle_post_request(r),
-                r if r.starts_with("GET /users/") => handle_get_request(r),
-                r if r.starts_with("GET /users") => handle_get_all_request(r),
-                r if r.starts_with("PUT /users/") => handle_put_request(r),
-                r if r.starts_with("DELETE /users/") => handle_delete_request(r),
-                _ => (NOT_FOUND.to_string(), "Not Found".to_string()),
+                r if r.starts_with("POST") && r.contains("/users") => handle_post_request(r),
+                r if r.starts_with("GET") && r.contains("/user/") => handle_get_request(r),
+                r if r.starts_with("GET") && r.contains("/users") => handle_get_all_request(r),
+                r if r.starts_with("PUT") && r.contains("/users/") => handle_put_request(r),
+                r if r.starts_with("DELETE") && r.contains("/users/") => handle_delete_request(r),
+                _ => (NOT_FOUND.to_string(), "Not Found URL".to_string()),
             };
 
             stream
@@ -66,7 +79,7 @@ fn handle_client(mut stream: TcpStream) {
 fn handle_post_request(request: &str) -> (String, String) {
     match (
         get_user_request_body(&request),
-        Client::connect(DB_URL, NoTls),
+        Client::connect(DB_URL().as_str(), NoTls),
     ) {
         (Ok(user), Ok(mut client)) => {
             client
@@ -88,9 +101,10 @@ fn handle_post_request(request: &str) -> (String, String) {
 fn handle_get_request(request: &str) -> (String, String) {
     match (
         get_id(&request).parse::<i32>(),
-        Client::connect(DB_URL, NoTls),
+        Client::connect(DB_URL().as_str(), NoTls),
     ) {
         (Ok(id), Ok(mut client)) => {
+            println!("ID: {}", id);
             match client.query_one("SELECT * FROM users WHERE id = $1", &[&id]) {
                 Ok(row) => {
                     let user = User {
@@ -114,7 +128,7 @@ fn handle_get_request(request: &str) -> (String, String) {
 }
 
 fn handle_get_all_request(request: &str) -> (String, String) {
-    match Client::connect(DB_URL, NoTls) {
+    match Client::connect(DB_URL().as_str(), NoTls) {
         Ok(mut client) => {
             let mut users = Vec::new();
 
@@ -142,7 +156,7 @@ fn handle_put_request(request: &str) -> (String, String) {
     match (
         get_id(&request).parse::<i32>(),
         get_user_request_body(&request),
-        Client::connect(DB_URL, NoTls),
+        Client::connect(DB_URL().as_str(), NoTls),
     ) {
         (Ok(id), Ok(user), Ok(mut client)) => {
             client
@@ -163,7 +177,7 @@ fn handle_put_request(request: &str) -> (String, String) {
 fn handle_delete_request(request: &str) -> (String, String) {
     match (
         get_id(&request).parse::<i32>(),
-        Client::connect(DB_URL, NoTls),
+        Client::connect(DB_URL().as_str(), NoTls),
     ) {
         (Ok(id), Ok(mut client)) => {
             let rows_affected = client
@@ -184,7 +198,8 @@ fn handle_delete_request(request: &str) -> (String, String) {
 }
 
 fn setup_database() -> Result<(), PostgresError> {
-    let mut client = Client::connect(DB_URL, NoTls)?;
+    println!("Database URL: {}", DB_URL());
+    let mut client = Client::connect(DB_URL().as_str(), NoTls)?;
 
     client.batch_execute(
         "CREATE TABLE IF NOT EXISTS users (
@@ -203,7 +218,7 @@ fn get_user_request_body(request: &str) -> Result<User, serde_json::Error> {
 fn get_id(request: &str) -> &str {
     request
         .split("/")
-        .nth(2)
+        .nth(4)
         .unwrap_or_default()
         .split_whitespace()
         .next()
